@@ -15,7 +15,7 @@ input,textarea,select{width:100%;margin:4px 0 8px}textarea{min-height:90px}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--ln)}.row>b{flex:1;min-width:140px}.row small,.msg{color:var(--mut)}.bad{color:var(--bad)}
 .bt{color:inherit;background:var(--card);border:1px solid var(--ln);border-radius:12px;padding:11px 14px;text-decoration:none}
 .pv{position:relative;display:block;margin:8px 0}.pv canvas{width:100%;height:auto;display:block;background:#fff;border-radius:6px}
-.bx{position:absolute;width:30%;height:7%;border:2px solid var(--ac);background:rgba(201,164,106,.25);pointer-events:none;font-size:12px;color:#000}
+.bx{position:absolute;width:22%;height:6.6%;border:2px solid var(--ac);background:rgba(201,164,106,.25);pointer-events:none;font-size:12px;color:#000}
 #pad{width:100%;height:170px;background:#fff;border-radius:10px;touch-action:none;display:block}
 .tp{display:none}.tp.on{display:block}
 #nv{position:fixed;left:0;right:0;bottom:0;display:flex;gap:4px;background:var(--card);border-top:1px solid var(--ln);padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px));z-index:20}
@@ -27,6 +27,7 @@ input,textarea,select{width:100%;margin:4px 0 8px}textarea{min-height:90px}
 <main id="app"><div class="card msg">Wird geladen …</div></main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 /* >>> HIER DEINE WERTE AUS SUPABASE EINTRAGEN (siehe ANLEITUNG.md) <<< */
@@ -78,26 +79,26 @@ async function signer(id){
 function login(){app.innerHTML='<div class="card"><h2>Anmelden</h2><input id="em" type="email" placeholder="E-Mail"><input id="pw" type="password" placeholder="Passwort"><button class="p" id="li">Öffnen</button><p class="bad" id="er"></p></div>';
   const go=async()=>{const{error}=await busy('Wird angemeldet …',()=>sb.auth.signInWithPassword({email:$('#em').value.trim(),password:$('#pw').value}));if(error)$('#er').textContent='E-Mail oder Passwort stimmt nicht.';else admin()};
   $('#li').onclick=go;$('#pw').onkeydown=e=>{if(e.key==='Enter')go()}}
-async function fetchA(){const{data,error}=await sb.from('docs').select('id,name,type,code,exp,at_u,at_v').order('name');if(error)throw error;A=data||[]}
+async function fetchA(){const{data,error}=await sb.from('docs').select('id,name,type,code,runde,exp,at_u,at_v').order('name');if(error)throw error;A=data||[]}
 function tab(t){document.querySelectorAll('.tp').forEach(x=>x.classList.toggle('on',x.dataset.t===t));document.querySelectorAll('#nv button').forEach(x=>x.classList.toggle('cur',x.dataset.t===t));scrollTo(0,0)}
 async function admin(){const{data:{session}}=await sb.auth.getSession();if(!session)return login();$('#who').textContent='Vorstand';
-  app.innerHTML=`<div class="card tp" data-t="neu"><h2>Neue Runde anlegen</h2><select id="ty"><option value="auszahlung">Auszahlung</option><option value="verzicht">Verzichtserklärung</option></select><input id="fi" type="file" accept="application/pdf"><textarea id="nm" placeholder="Namen werden aus dem PDF gelesen, eine Zeile pro Seite"></textarea><button class="p" id="go">Aufteilen und anlegen</button><p class="msg" id="gs"></p></div>
-  <div class="card tp" data-t="fel"><h2>Unterschriftsfelder</h2><p class="msg">Feld wählen, dann auf die Stelle im Dokument tippen. Gespeichert wird pro Dokumenttyp.</p><select id="fld"></select><div class="pv" id="pv"><span class="msg">Tippe bei einem Dokument im Menü auf „Felder“.</span></div><button class="p" id="sv" hidden>Felder speichern</button></div>
-  <div class="tp" data-t="home"><div id="ls"></div></div>
-  <div class="card tp" data-t="set"><h2>Passwort ändern</h2><input id="pn" type="password" placeholder="Neues Passwort"><input id="pn2" type="password" placeholder="Wiederholen"><button class="p" id="pc">Speichern</button><p class="bad" id="pce"></p><h2>Abgelaufene Dokumente</h2><p class="msg">Löscht Dokumente ohne Unterschrift, deren Link abgelaufen ist.</p><button id="ex">Abgelaufene löschen</button><p class="msg" id="exm"></p><h2>Abmelden</h2><button id="lo">Abmelden</button></div>
+  app.innerHTML=`<div class="card tp" data-t="neu"><h2>Neue Runde anlegen</h2><input id="rd" placeholder="Bezeichnung der Runde, z. B. Fußball 2026" maxlength="60"><select id="ty"><option value="auszahlung">Auszahlung</option><option value="verzicht">Verzichtserklärung</option></select><input id="fi" type="file" accept="application/pdf"><textarea id="nm" placeholder="Namen werden aus dem PDF gelesen, eine Zeile pro Seite"></textarea><button class="p" id="go">Aufteilen und anlegen</button><p class="msg" id="gs"></p></div>
+  <div class="card tp" data-t="fel"><h2>Unterschriftsfelder</h2><p class="msg">Feld wählen, dann auf die Stelle tippen, an der die Unterschriftslinie beginnt (dort sitzt die Unterkante der Unterschrift). Gespeichert wird pro Dokumenttyp.</p><select id="fld"></select><div class="pv" id="pv"><span class="msg">Tippe bei einem Dokument im Menü auf „Felder“.</span></div><button class="p" id="sv" hidden>Felder speichern</button></div>
+  <div class="tp" data-t="home"><select id="rf"></select><div class="row" id="rbar" hidden><button id="kl">Kontrollliste</button><button id="ab">Runde abschließen</button><button id="rl">Runde löschen</button></div><div id="ls"></div></div>
+  <div class="card tp" data-t="set"><h2>Passwort ändern</h2><input id="pn" type="password" placeholder="Neues Passwort"><input id="pn2" type="password" placeholder="Wiederholen"><button class="p" id="pc">Speichern</button><p class="bad" id="pce"></p><h2>Abgelaufene Dokumente</h2><p class="msg">Löscht Dokumente ohne Unterschrift, deren Link abgelaufen ist.</p><button id="ex">Abgelaufene löschen</button><p class="msg" id="exm"></p><h2>App leeren</h2><p class="msg">Löscht alle Dokumente und Feld-Einstellungen endgültig (Rohzustand).</p><button id="wp">App leeren …</button><h2>Abmelden</h2><button id="lo">Abmelden</button></div>
   <nav id="nv"><button data-t="home">Übersicht</button><button data-t="neu">Neue Runde</button><button data-t="fel">Felder</button><button data-t="set">Einstellungen</button></nav>`;
   $('#nv').onclick=e=>{const b=e.target.closest('button');if(b)tab(b.dataset.t)};
   $('#fi').onchange=readFile;$('#ty').onchange=readFile;$('#go').onclick=()=>busy('Wird angelegt …',create);$('#lo').onclick=async()=>{await sb.auth.signOut();location.reload()};
   $('#pc').onclick=async()=>{const e=$('#pce'),n=$('#pn').value;e.className='bad';if(n.length<8){e.textContent='Mindestens 8 Zeichen.';return}if(n!==$('#pn2').value){e.textContent='Die Eingaben stimmen nicht überein.';return}
     const{error}=await busy('Wird gespeichert …',()=>sb.auth.updateUser({password:n}));e.className=error?'bad':'msg';e.textContent=error?error.message:'Passwort geändert.'};
   $('#ex').onclick=async()=>{const{error}=await busy('Wird gelöscht …',()=>sb.from('docs').delete().is('at_u',null).lt('exp',new Date().toISOString()));$('#exm').textContent=error?error.message:'Erledigt.';refresh()};
-  tab('home');refresh()}
+  $('#rf').onchange=list;$('#kl').onclick=()=>kontroll(false);$('#ab').onclick=abschluss;$('#rl').onclick=delRunde;$('#wp').onclick=wipe;tab('home');refresh()}
 async function refresh(){try{await fetchA()}catch(e){note('Laden nicht möglich: '+(e.message||e.code||e));return}list()}
-function list(){const box=$('#ls');if(!box)return;const g={w:[],o:[],f:[]};
-  A.forEach(d=>(done(d)?g.f:(d.at_u&&d.type==='auszahlung'&&!d.at_v)?g.w:g.o).push(d));W=g.w;
+function list(){const box=$('#ls');if(!box)return;const rf=$('#rf'),cur=rf.value||'*',rs=[...new Set(A.map(d=>d.runde||''))].sort();rf.innerHTML='<option value="*">Alle Runden</option>'+rs.map(r=>'<option value="'+esc(r)+'">'+(r?esc(r):'Ohne Runde')+'</option>').join('');rf.value=(rs.includes(cur)||cur==='*')?cur:'*';$('#rbar').hidden=rf.value==='*';const V=rf.value==='*'?A:A.filter(d=>(d.runde||'')===rf.value),g={w:[],o:[],f:[]};
+  V.forEach(d=>(done(d)?g.f:(d.at_u&&d.type==='auszahlung'&&!d.at_v)?g.w:g.o).push(d));W=g.w;
   const main=d=>done(d)?'<button class="p" data-a="dl">PDF laden</button>':d.at_u?'<button class="p" data-a="vs">Unterschreiben</button>':'<button class="p" data-a="sh">Teilen</button>',
   info=d=>done(d)||d.at_u?'':' · '+(d.exp?(new Date(d.exp)<new Date()?'Link abgelaufen':'gültig bis '+fmt(d.exp)):'nicht geteilt'),
-  row=d=>'<div class="row" data-id="'+d.id+'"><b>'+esc(d.name)+'<br><small>'+(TY[d.type]||d.type)+' · Code '+esc(d.code)+info(d)+'</small></b>'+main(d)+'<button data-a="mn">⋯</button></div>',
+  row=d=>'<div class="row" data-id="'+d.id+'"><b>'+esc(d.name)+'<br><small>'+(d.runde?esc(d.runde)+' · ':'')+(TY[d.type]||d.type)+' · Code '+esc(d.code)+info(d)+'</small></b>'+main(d)+'<button data-a="mn">⋯</button></div>',
   S=[['w','Wartet auf deine Unterschrift'],['o','Offen bei den Übungsleitern'],['f','Fertig']];
   box.innerHTML=(A.length?'':'<div class="card msg">Noch nichts angelegt. Lege unter „Neue Runde“ die ersten Dokumente an.</div>')+(g.w.length?'<button class="p" id="nx" style="width:100%;margin-bottom:10px">Nächstes unterschreiben</button>':'')+S.map(([k,t])=>'<details class="sec"'+(k!=='f'?' open':'')+'><summary>'+t+' ('+g[k].length+')</summary>'+(g[k].map(row).join('')||'<p class="msg">Nichts offen.</p>')+'</details>').join('');
   box.onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.id==='nx'){act('vs',W[0]);return}const r=b.closest('.row'),d=r&&A.find(x=>x.id===r.dataset.id);if(!d)return;
@@ -123,29 +124,57 @@ async function getCfg(t){const{data}=await sb.from('cfg').select('data').eq('typ
 async function showPrev(ty,p64){cfg=await getCfg(ty);const pv=$('#pv'),fl=$('#fld');
   fl.innerHTML='<option value="ul">Feld Übungsleiter</option>'+(ty==='auszahlung'?'<option value="vs">Feld Vorstand</option>':'');
   if(!await render(unb(p64),pv,700))return;
-  const draw=()=>{pv.querySelectorAll('.bx').forEach(x=>x.remove());for(const k in cfg){const b=document.createElement('div');b.className='bx';b.textContent=k==='ul'?'Übungsleiter':'Vorstand';b.style.left=cfg[k].x*100+'%';b.style.top=cfg[k].y*100+'%';pv.append(b)}};
+  const draw=()=>{pv.querySelectorAll('.bx').forEach(x=>x.remove());for(const k in cfg){const b=document.createElement('div');b.className='bx';b.textContent=k==='ul'?'Übungsleiter':'Vorstand';b.style.left=cfg[k].x*100+'%';b.style.top=(cfg[k].y-.066)*100+'%';pv.append(b)}};
   draw();$('#sv').hidden=false;
-  pv.onclick=e=>{const r=pv.getBoundingClientRect();cfg[fl.value]={x:Math.min(.7,(e.clientX-r.left)/r.width),y:Math.min(.93,(e.clientY-r.top)/r.height)};draw()};
+  pv.onclick=e=>{const r=pv.getBoundingClientRect();cfg[fl.value]={x:Math.min(.7,(e.clientX-r.left)/r.width),y:Math.max(.08,Math.min(.97,(e.clientY-r.top)/r.height))};draw()};
   $('#sv').onclick=async()=>{const{error}=await busy('Wird gespeichert …',()=>sb.from('cfg').upsert({type:ty,data:cfg}));$('#sv').textContent=error?'Fehler':'Gespeichert ✓';setTimeout(()=>$('#sv').textContent='Felder speichern',1800)}}
 async function readFile(){const f=$('#fi').files[0],gs=$('#gs');pdfBuf=null;$('#nm').value='';if(!f)return;
-  await busy('PDF wird gelesen …',async()=>{try{pdfBuf=new Uint8Array(await f.arrayBuffer());const pdf=await pdfjsLib.getDocument({data:pdfBuf.slice()}).promise,ty=$('#ty').value,out=[];
-    for(let i=1;i<=pdf.numPages;i++){const t=(await(await pdf.getPage(i)).getTextContent()).items.map(x=>x.str).filter(s=>s.trim()),j=t.join(' ').replace(/\s+/g,' ');
+  await busy('PDF wird gelesen …',async()=>{try{pdfBuf=new Uint8Array(await f.arrayBuffer());const pdf=await pdfjsLib.getDocument({data:pdfBuf.slice()}).promise,ty=$('#ty').value,out=[];let mu=0,mv=0;
+    for(let i=1;i<=pdf.numPages;i++){let t=(await(await pdf.getPage(i)).getTextContent()).items.map(x=>x.str);const raw=t.join(' ');if(raw.includes('[[UL]]'))mu++;if(raw.includes('[[VS]]'))mv++;t=t.map(s=>s.replace(/\[\[(UL|VS)\]\]/g,'')).filter(s=>s.trim());const j=t.join(' ').replace(/\s+/g,' ');
       const m=ty==='auszahlung'?j.match(/wird (.+?) für die in eigener/):null;out.push(m?m[1].trim():(t[t.length-1]||'').trim())}
-    $('#nm').value=out.join('\n');gs.textContent=pdf.numPages+' Seite(n) gelesen. Bitte die Namen prüfen und bei Bedarf korrigieren.'}
+    $('#nm').value=out.join('\n');const N=pdf.numPages,ok=c=>c===N?'✓':'⚠ '+c+' von '+N;gs.textContent=N+' Seite(n) gelesen. Marker Übungsleiter '+ok(mu)+(ty==='auszahlung'?', Vorstand '+ok(mv):'')+'. Wo ein Marker fehlt, gilt das gespeicherte Feld. Bitte die Namen prüfen.'}
     catch(e){pdfBuf=null;gs.innerHTML='<span class="bad">PDF nicht lesbar: '+esc(e.message||e)+'</span>'}})}
-async function create(){const gs=$('#gs'),ty=$('#ty').value;if(!pdfBuf){gs.textContent='Bitte zuerst ein PDF wählen.';return}
+async function create(){const gs=$('#gs'),ty=$('#ty').value,rd=$('#rd').value.trim();if(!rd){gs.innerHTML='<span class="bad">Bitte eine Bezeichnung für die Runde eintragen.</span>';return}if(!pdfBuf){gs.textContent='Bitte zuerst ein PDF wählen.';return}
   const nm=$('#nm').value.split('\n').map(s=>s.trim()).filter(Boolean);
   try{const src=await PDFLib.PDFDocument.load(pdfBuf),n=src.getPageCount();if(nm.length!==n){gs.innerHTML='<span class="bad">'+n+' Seiten, aber '+nm.length+' Namen. Bitte angleichen.</span>';return}
     for(let i=0;i<n;i++){const hh=$('#busy h2');if(hh)hh.textContent='Lege '+(i+1)+' von '+n+' an …';
       const o=await PDFLib.PDFDocument.create(),[p]=await o.copyPages(src,[i]);o.addPage(p);
-      const code=String(1000+(crypto.getRandomValues(new Uint32Array(1))[0]%9000)),{error}=await sb.from('docs').insert({name:nm[i],type:ty,code,pdf:b64(await o.save())});if(error)throw error}
+      const code=String(1000+(crypto.getRandomValues(new Uint32Array(1))[0]%9000)),{error}=await sb.from('docs').insert({name:nm[i],runde:rd,type:ty,code,pdf:b64(await o.save())});if(error)throw error}
     pdfBuf=null;$('#fi').value='';$('#nm').value='';gs.textContent=n+' Dokumente angelegt.';await refresh();tab('home')}
   catch(e){gs.innerHTML='<span class="bad">Fehler: '+esc(e.message||e.code||e)+'</span>'}}
-async function download(d){try{const r=await getRow(d.id,'name,type,pdf,sig_u,at_u,sig_v,at_v'),f=await getCfg(r.type),doc=await PDFLib.PDFDocument.load(unb(r.pdf)),pg=doc.getPage(0),{width:w,height:h}=pg.getSize(),ft=await doc.embedFont(PDFLib.StandardFonts.Helvetica);
-  for(const[k,s,t]of[['ul',r.sig_u,r.at_u],['vs',r.sig_v,r.at_v]]){if(!s||!f[k])continue;const im=await doc.embedPng(unb(s)),W2=.3*w,H=.07*h,X=f[k].x*w,Y=h-f[k].y*h-H;
-    pg.drawImage(im,{x:X,y:Y,width:W2,height:H});pg.drawText('Digital unterschrieben am '+fmt(t),{x:X,y:Y-8,size:7,font:ft})}
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([await doc.save()],{type:'application/pdf'}));a.download=(r.name+'_'+r.type).replace(/[^\wÄÖÜäöüß-]+/g,'_')+'.pdf';document.body.append(a);a.click();a.remove()}
-  catch(e){note('Download nicht möglich: '+(e.message||e.code||e))}}
+const dt=t=>new Date(t).toLocaleDateString('de-DE')+' um '+new Date(t).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' Uhr';
+async function markers(bytes){const out={};try{const pdf=await pdfjsLib.getDocument({data:bytes.slice()}).promise,pg=await pdf.getPage(1),o=pg.view[0],q=pg.view[1];
+  for(const it of(await pg.getTextContent()).items)for(const k of['UL','VS'])if(it.str.includes('[['+k+']]')&&!out[k])out[k]={x:it.transform[4]-o,y:it.transform[5]-q}}catch(e){}return out}
+async function buildPdf(id){const r=await getRow(id,'name,type,runde,pdf,sig_u,at_u,sig_v,at_v'),bytes=unb(r.pdf),f=await getCfg(r.type),mk=await markers(bytes),doc=await PDFLib.PDFDocument.load(bytes),pg=doc.getPage(0),{width:w,height:h}=pg.getSize(),ft=await doc.embedFont(PDFLib.StandardFonts.Helvetica),g=PDFLib.rgb(.35,.35,.35),cl=x=>x.replace(/[^\x20-\xFF]/g,'?');
+  for(const[k,sg]of[['ul',r.sig_u],['vs',r.sig_v]]){if(!sg)continue;const m=mk[k.toUpperCase()],fp=f[k];if(!m&&!fp)continue;
+    const im=await doc.embedPng(unb(sg)),W2=.22*w,H=W2*im.height/im.width,X=m?m.x:fp.x*w,Y=(m?m.y:h-fp.y*h)+2;pg.drawImage(im,{x:X,y:Y,width:W2,height:H})}
+  const L=['Digital unterzeichnet von '+r.name+' (Übungsleiter) am '+dt(r.at_u)];if(r.sig_v)L.push('Digital gegengezeichnet vom Vorstand am '+dt(r.at_v));
+  L.forEach((t,i)=>{t=cl(t);pg.drawText(t,{x:(w-ft.widthOfTextAtSize(t,7))/2,y:24-i*10,size:7,font:ft,color:g})});
+  return{bytes:await doc.save(),name:(r.runde?r.runde+'_':'')+r.name+'_'+r.type}}
+const fn=x=>x.replace(/[^\wÄÖÜäöüß-]+/g,'_')+'.pdf';
+const save=(blob,name)=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.append(a);a.click();a.remove()};
+async function download(d){try{const b=await busy('PDF wird erstellt …',()=>buildPdf(d.id));save(new Blob([b.bytes],{type:'application/pdf'}),fn(b.name))}catch(e){note('Download nicht möglich: '+(e.message||e.code||e))}}
+async function zipAll(L){try{await busy('ZIP wird erstellt …',async()=>{const z=new JSZip();let i=0;for(const d of L){const hh=$('#busy h2');if(hh)hh.textContent='PDF '+(++i)+' von '+L.length+' …';const b=await buildPdf(d.id);z.file(fn(b.name),b.bytes)}
+  save(await z.generateAsync({type:'blob'}),'Unterschriebene_Dokumente'+(rsel()!=='*'&&rsel()?'_'+rsel().replace(/[^\w-]+/g,'_'):'')+'.zip')})}catch(e){note('ZIP nicht möglich: '+(e.message||e.code||e))}}
+/* ---------- Runden, Kontrollliste, Leeren ---------- */
+const rsel=()=>$('#rf').value,inR=()=>rsel()==='*'?A:A.filter(d=>(d.runde||'')===rsel());
+const stat=d=>done(d)?'fertig':d.at_u?'wartet auf Vorstand':'offen';
+function kontroll(close){const L=[...inR()].sort((a,b)=>(!!done(a)-!!done(b))||a.name.localeCompare(b.name,'de')),n=L.filter(done).length;
+  const rows=L.map(d=>'<tr style="color:'+(done(d)?'var(--ok)':'var(--bad)')+'"><td>'+esc(d.name)+'</td><td>'+(d.type==='verzicht'?'Verzicht':'Auszahlung')+'</td><td>'+(d.at_u?fmt(d.at_u):'–')+'</td><td>'+(d.type==='verzicht'?'–':d.at_v?fmt(d.at_v):'–')+'</td><td>'+stat(d)+'</td></tr>').join('');
+  modal('<h2>Kontrollliste'+(rsel()==='*'?'':' · '+esc(rsel()||'Ohne Runde'))+'</h2><p class="msg">'+n+' von '+L.length+' fertig'+(close?' · offene Links sind gesperrt':'')+'</p><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:14px"><tr><th align="left">Name</th><th align="left">Typ</th><th align="left">Übungsleiter</th><th align="left">Vorstand</th><th align="left">Status</th></tr>'+rows+'</table></div><div class="row"><button id="cv">CSV speichern</button>'+(n?'<button id="zp">Fertige PDFs (ZIP)</button>':'')+'<button class="p" id="mc">Schließen</button></div>',(o,c)=>{
+    o.querySelector('#mc').onclick=c;
+    o.querySelector('#cv').onclick=()=>{const q=x=>'"'+String(x).replace(/"/g,'""')+'"',t='\ufeffName;Typ;Übungsleiter;Vorstand;Status\n'+L.map(d=>[d.name,d.type,d.at_u?fmt(d.at_u):'',d.at_v?fmt(d.at_v):'',stat(d)].map(q).join(';')).join('\n');save(new Blob([t],{type:'text/csv;charset=utf-8'}),'Kontrollliste'+(rsel()!=='*'&&rsel()?'_'+rsel().replace(/[^\w-]+/g,'_'):'')+'.csv')};
+    const z=o.querySelector('#zp');z&&(z.onclick=()=>zipAll(L.filter(done)))})}
+function abschluss(){const n=inR().filter(d=>!d.at_u).length;
+  modal('<h2>Runde abschließen?</h2><p>'+n+' offene Links werden sofort gesperrt. Unterschriebene Dokumente bleiben erhalten.</p><div class="row"><button id="mn">Abbrechen</button><button class="p" id="my">Abschließen</button></div>',(o,c)=>{o.querySelector('#mn').onclick=c;o.querySelector('#my').onclick=async()=>{c();try{
+    let q=sb.from('docs').update({exp:new Date(Date.now()-1000).toISOString()}).is('at_u',null);const r=rsel();if(r!=='*')q=r?q.eq('runde',r):q.is('runde',null);
+    const{error}=await busy('Wird abgeschlossen …',()=>q);if(error)throw error;await fetchA();list();kontroll(true)}catch(e){note('Abschließen nicht möglich: '+(e.message||e.code||e))}}})}
+function delRunde(){const r=rsel(),n=inR().length;
+  modal('<h2>Runde löschen?</h2><p>'+n+' Dokumente der Runde „'+esc(r||'Ohne Runde')+'“ werden endgültig gelöscht.</p><div class="row"><button id="mn">Abbrechen</button><button class="p" id="my">Löschen</button></div>',(o,c)=>{o.querySelector('#mn').onclick=c;o.querySelector('#my').onclick=async()=>{c();try{
+    let q=sb.from('docs').delete();q=r?q.eq('runde',r):q.is('runde',null);const{error}=await busy('Wird gelöscht …',()=>q);if(error)throw error;$('#rf').value='*';await refresh()}catch(e){note('Löschen nicht möglich: '+(e.message||e.code||e))}}})}
+function wipe(){modal('<h2>App leeren?</h2><p>Alle Dokumente, Unterschriften und Feld-Einstellungen werden <b>endgültig</b> gelöscht. Das lässt sich nicht rückgängig machen. Lade vorher fertige PDFs herunter.</p><input id="wc" placeholder="Zur Bestätigung LEEREN eintippen" autocomplete="off"><div class="row"><button id="mn">Abbrechen</button><button class="p" id="my">Alles löschen</button></div><p class="bad" id="we"></p>',(o,c)=>{
+  o.querySelector('#mn').onclick=c;o.querySelector('#my').onclick=async()=>{if(o.querySelector('#wc').value.trim()!=='LEEREN'){o.querySelector('#we').textContent='Bitte LEEREN eintippen.';return}c();
+    try{const{error}=await busy('Wird geleert …',()=>sb.rpc('wipe_all'));if(error)throw error;$('#rf').value='*';await refresh();$('#exm').textContent='App geleert.'}catch(e){note('Leeren nicht möglich: '+(e.message||e.code||e))}}})}
 /* ---------- Start ---------- */
 const id=new URLSearchParams(location.search).get('d');
 if(SB_URL.startsWith('HIER')){app.innerHTML='<div class="card"><h2>Noch nicht eingerichtet</h2><p class="msg">Trage in der Datei index.html oben die Werte aus Supabase ein (siehe ANLEITUNG.md).</p></div>'}

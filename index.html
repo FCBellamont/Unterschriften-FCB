@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Unterschriften</title>
+<style>
+:root{--bg:#1b1b1d;--card:#2c2c2e;--tx:#f5f5f7;--mut:#c0c0c6;--ln:#4a4a4e;--ac:#c9a46a;--bad:#ff8f80;--ok:#7fd6a0;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-top:env(safe-area-inset-top,0px)}
+header{padding:14px 16px;margin-bottom:12px;background:linear-gradient(135deg,#17508f,#3f86d4);color:#fff;border-radius:0 0 22px 22px}
+h1{font-size:24px;margin:0;font-weight:800}h2{font-size:17px;margin:0 0 8px;color:var(--ac)}header small{opacity:.85}
+main{max-width:760px;margin:0 auto;padding:0 12px 96px;display:grid;gap:12px}
+.card{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:14px}
+button,select,input,textarea{font:inherit;color:inherit;background:var(--bg);border:1px solid var(--ln);border-radius:12px;padding:11px 14px;max-width:100%}
+button{cursor:pointer;touch-action:manipulation;background:var(--card)}.p{background:var(--ac);color:#1b1b1d;border:0;font-weight:700}
+input,textarea,select{width:100%;margin:4px 0 8px}textarea{min-height:90px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--ln)}.row>b{flex:1;min-width:140px}.row small,.msg{color:var(--mut)}.bad{color:var(--bad)}
+.bt{color:inherit;background:var(--card);border:1px solid var(--ln);border-radius:12px;padding:11px 14px;text-decoration:none}
+.pv{position:relative;display:block;margin:8px 0}.pv canvas{width:100%;height:auto;display:block;background:#fff;border-radius:6px}
+.bx{position:absolute;width:30%;height:7%;border:2px solid var(--ac);background:rgba(201,164,106,.25);pointer-events:none;font-size:12px;color:#000}
+#pad{width:100%;height:170px;background:#fff;border-radius:10px;touch-action:none;display:block}
+.tp{display:none}.tp.on{display:block}
+#nv{position:fixed;left:0;right:0;bottom:0;display:flex;gap:4px;background:var(--card);border-top:1px solid var(--ln);padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px));z-index:20}
+#nv button{flex:1;border:0;background:none;padding:12px 4px;font-size:14px}#nv .cur{background:var(--bg);color:var(--ac);font-weight:700}
+.sec{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:4px 14px;margin-bottom:10px}.sec summary{font-weight:700;color:var(--ac);padding:12px 0;cursor:pointer}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.7);display:grid;place-items:center;z-index:50;padding:16px}.ov .card{max-width:560px;width:100%;max-height:90vh;overflow:auto}.col{display:grid;gap:8px}
+</style></head><body>
+<header><h1>Unterschriften</h1><small id="who"></small></header>
+<main id="app"><div class="card msg">Wird geladen …</div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+/* >>> HIER DEINE WERTE AUS SUPABASE EINTRAGEN (siehe ANLEITUNG.md) <<< */
+const SB_URL='https://msybpxzjpatyyjhcnskg.supabase.co', SB_KEY='sb_publishable_5UdpPnKK_bl5IWQDQojpww_F6QcdqoL';
+const sb=supabase.createClient(SB_URL,SB_KEY),$=s=>document.querySelector(s),app=$('#app');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
+const TY={auszahlung:'Auszahlung',verzicht:'Verzichtserklärung'};
+const DEF={auszahlung:{ul:{x:.08,y:.78},vs:{x:.55,y:.78}},verzicht:{ul:{x:.55,y:.78}}};
+let cfg={},A=[],W=[],pdfBuf=null,busyN=0;
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const b64=u=>{let s='';for(let i=0;i<u.length;i+=8192)s+=String.fromCharCode.apply(null,u.subarray(i,i+8192));return btoa(s)};
+const unb=s=>Uint8Array.from(atob(s.split(',').pop()),c=>c.charCodeAt(0));
+const fmt=t=>new Date(t).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'});
+const done=d=>d.at_u&&(d.type==='verzicht'||d.at_v);
+const note=m=>{let t=$('#nt');if(!t){t=document.createElement('div');t.id='nt';t.className='card bad';t.style.cssText='position:sticky;top:8px;z-index:9';app.prepend(t)}t.textContent=m};
+addEventListener('unhandledrejection',e=>note('Fehler: '+((e.reason&&(e.reason.message||e.reason.code))||e.reason)));
+async function busy(msg,fn){busyN++;let o=$('#busy');if(!o){o=document.createElement('div');o.id='busy';o.className='ov';document.body.append(o)}
+  o.innerHTML='<div class="card"><h2>'+esc(msg)+'</h2><p class="msg">Bitte einen Moment warten …</p></div>';
+  try{return await fn()}finally{if(--busyN<=0){busyN=0;o.remove()}}}
+function modal(html,wire){const o=document.createElement('div');o.className='ov';o.innerHTML='<div class="card">'+html+'</div>';document.body.append(o);const c=()=>o.remove();wire&&wire(o,c)}
+async function render(bytes,box,w){box.innerHTML='<span class="msg">Vorschau wird geladen …</span>';
+  try{const pdf=await pdfjsLib.getDocument({data:bytes.slice()}).promise,pg=await pdf.getPage(1),vp=pg.getViewport({scale:(w||700)*2/pg.view[2]}),c=document.createElement('canvas');
+    c.width=vp.width;c.height=vp.height;await pg.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;box.innerHTML='';box.append(c);return true}
+  catch(e){box.innerHTML='<span class="bad">Vorschau nicht möglich: '+esc(e.message||e)+'</span>';return false}}
+const MSG=(d,url)=>'Hallo '+d.name+',\n\nanbei erhältst du ein Dokument im Rahmen der Übungsleiterpauschale. Sobald die Dokumente unterzeichnet sind, bekommst du in den kommenden Tagen deine Spendenbescheinigung zugestellt.\n\nZum Unterzeichnen benötigst du den folgenden Code, den du bitte nach dem Öffnen des Links eingibst:\n\nCode: '+d.code+'\nLink: '+url+'\n\nDer Link ist 24 Stunden gültig.';
+/* ---------- Unterschrift-Ansicht (Übungsleiter und Vorstand) ---------- */
+function padView(title,sub,pdf,onSign,onBack){
+  app.innerHTML='<div class="card"><h2>'+esc(title)+'</h2><p class="msg">'+sub+'</p><div class="pv" id="pv"></div><canvas id="pad" width="800" height="340"></canvas><div class="row"><button id="cl">Neu schreiben</button><button class="p" id="sg">Unterschreiben und senden</button>'+(onBack?'<button id="bk">Abbrechen</button>':'')+'</div><p class="bad" id="er"></p></div>';
+  render(unb(pdf),$('#pv'),Math.min(innerWidth-32,700));
+  const c=$('#pad'),x=c.getContext('2d');x.lineWidth=5;x.lineCap='round';x.strokeStyle='#111';let dr=false,any=false;
+  const pt=e=>{const r=c.getBoundingClientRect();return[(e.clientX-r.left)*c.width/r.width,(e.clientY-r.top)*c.height/r.height]};
+  c.onpointerdown=e=>{dr=true;c.setPointerCapture(e.pointerId);const[a,b]=pt(e);x.beginPath();x.moveTo(a,b)};
+  c.onpointermove=e=>{if(!dr)return;const[a,b]=pt(e);x.lineTo(a,b);x.stroke();any=true};c.onpointerup=()=>dr=false;
+  $('#cl').onclick=()=>{x.clearRect(0,0,c.width,c.height);any=false};onBack&&($('#bk').onclick=onBack);
+  $('#sg').onclick=async()=>{if(!any){$('#er').textContent='Bitte zuerst unterschreiben.';return}
+    try{await busy('Wird gespeichert …',()=>onSign(c.toDataURL('image/png')))}catch(e){$('#er').textContent='Speichern nicht möglich: '+(e.message||e.code||e)}}}
+async function signer(id){
+  app.innerHTML='<div class="card"><h2>Code eingeben</h2><p class="msg">Den 4-stelligen Code hast du zusammen mit dem Link bekommen.</p><input id="cd" inputmode="numeric" maxlength="4" placeholder="Code"><button class="p" id="ok">Weiter</button><p class="bad" id="er"></p></div>';
+  const M={notfound:'Der Link ist ungültig.',locked:'Zu viele Versuche. Bitte in 5 Minuten erneut versuchen.',expired:'Dieser Link ist abgelaufen. Bitte melde dich beim Vorstand, du bekommst einen neuen.',code:'Der Code stimmt nicht.',sig:'Die Unterschrift ist ungültig.'};
+  $('#ok').onclick=async()=>{const code=$('#cd').value.trim(),er=$('#er');er.textContent='';
+    const{data:r,error}=await busy('Wird geprüft …',()=>sb.rpc('get_doc',{p_id:id,p_code:code}));
+    if(error||!r){er.textContent='Verbindung nicht möglich. Bitte später erneut versuchen.';return}
+    if(r.err){er.textContent=M[r.err]||'Fehler.';return}
+    if(r.signed){app.innerHTML='<div class="card"><h2>Schon unterschrieben</h2><p class="msg">Vielen Dank!</p></div>';return}
+    padView(r.name,(TY[r.type]||'')+'. Bitte lies das Dokument und unterschreibe darunter.',r.pdf,async sig=>{
+      const{data:s,error:e}=await sb.rpc('sign_doc',{p_id:id,p_code:code,p_sig:sig});if(e)throw e;if(s.err)throw new Error(M[s.err]||s.err);
+      app.innerHTML='<div class="card"><h2>Danke, erledigt ✓</h2><p class="msg">Deine Unterschrift ist gespeichert. Du kannst die Seite schließen.</p></div>'})}}
+/* ---------- Vorstand ---------- */
+function login(){app.innerHTML='<div class="card"><h2>Anmelden</h2><input id="em" type="email" placeholder="E-Mail"><input id="pw" type="password" placeholder="Passwort"><button class="p" id="li">Öffnen</button><p class="bad" id="er"></p></div>';
+  const go=async()=>{const{error}=await busy('Wird angemeldet …',()=>sb.auth.signInWithPassword({email:$('#em').value.trim(),password:$('#pw').value}));if(error)$('#er').textContent='E-Mail oder Passwort stimmt nicht.';else admin()};
+  $('#li').onclick=go;$('#pw').onkeydown=e=>{if(e.key==='Enter')go()}}
+async function fetchA(){const{data,error}=await sb.from('docs').select('id,name,type,code,exp,at_u,at_v').order('name');if(error)throw error;A=data||[]}
+function tab(t){document.querySelectorAll('.tp').forEach(x=>x.classList.toggle('on',x.dataset.t===t));document.querySelectorAll('#nv button').forEach(x=>x.classList.toggle('cur',x.dataset.t===t));scrollTo(0,0)}
+async function admin(){const{data:{session}}=await sb.auth.getSession();if(!session)return login();$('#who').textContent='Vorstand';
+  app.innerHTML=`<div class="card tp" data-t="neu"><h2>Neue Runde anlegen</h2><select id="ty"><option value="auszahlung">Auszahlung</option><option value="verzicht">Verzichtserklärung</option></select><input id="fi" type="file" accept="application/pdf"><textarea id="nm" placeholder="Namen werden aus dem PDF gelesen, eine Zeile pro Seite"></textarea><button class="p" id="go">Aufteilen und anlegen</button><p class="msg" id="gs"></p></div>
+  <div class="card tp" data-t="fel"><h2>Unterschriftsfelder</h2><p class="msg">Feld wählen, dann auf die Stelle im Dokument tippen. Gespeichert wird pro Dokumenttyp.</p><select id="fld"></select><div class="pv" id="pv"><span class="msg">Tippe bei einem Dokument im Menü auf „Felder“.</span></div><button class="p" id="sv" hidden>Felder speichern</button></div>
+  <div class="tp" data-t="home"><div id="ls"></div></div>
+  <div class="card tp" data-t="set"><h2>Passwort ändern</h2><input id="pn" type="password" placeholder="Neues Passwort"><input id="pn2" type="password" placeholder="Wiederholen"><button class="p" id="pc">Speichern</button><p class="bad" id="pce"></p><h2>Abgelaufene Dokumente</h2><p class="msg">Löscht Dokumente ohne Unterschrift, deren Link abgelaufen ist.</p><button id="ex">Abgelaufene löschen</button><p class="msg" id="exm"></p><h2>Abmelden</h2><button id="lo">Abmelden</button></div>
+  <nav id="nv"><button data-t="home">Übersicht</button><button data-t="neu">Neue Runde</button><button data-t="fel">Felder</button><button data-t="set">Einstellungen</button></nav>`;
+  $('#nv').onclick=e=>{const b=e.target.closest('button');if(b)tab(b.dataset.t)};
+  $('#fi').onchange=readFile;$('#ty').onchange=readFile;$('#go').onclick=()=>busy('Wird angelegt …',create);$('#lo').onclick=async()=>{await sb.auth.signOut();location.reload()};
+  $('#pc').onclick=async()=>{const e=$('#pce'),n=$('#pn').value;e.className='bad';if(n.length<8){e.textContent='Mindestens 8 Zeichen.';return}if(n!==$('#pn2').value){e.textContent='Die Eingaben stimmen nicht überein.';return}
+    const{error}=await busy('Wird gespeichert …',()=>sb.auth.updateUser({password:n}));e.className=error?'bad':'msg';e.textContent=error?error.message:'Passwort geändert.'};
+  $('#ex').onclick=async()=>{const{error}=await busy('Wird gelöscht …',()=>sb.from('docs').delete().is('at_u',null).lt('exp',new Date().toISOString()));$('#exm').textContent=error?error.message:'Erledigt.';refresh()};
+  tab('home');refresh()}
+async function refresh(){try{await fetchA()}catch(e){note('Laden nicht möglich: '+(e.message||e.code||e));return}list()}
+function list(){const box=$('#ls');if(!box)return;const g={w:[],o:[],f:[]};
+  A.forEach(d=>(done(d)?g.f:(d.at_u&&d.type==='auszahlung'&&!d.at_v)?g.w:g.o).push(d));W=g.w;
+  const main=d=>done(d)?'<button class="p" data-a="dl">PDF laden</button>':d.at_u?'<button class="p" data-a="vs">Unterschreiben</button>':'<button class="p" data-a="sh">Teilen</button>',
+  info=d=>done(d)||d.at_u?'':' · '+(d.exp?(new Date(d.exp)<new Date()?'Link abgelaufen':'gültig bis '+fmt(d.exp)):'nicht geteilt'),
+  row=d=>'<div class="row" data-id="'+d.id+'"><b>'+esc(d.name)+'<br><small>'+(TY[d.type]||d.type)+' · Code '+esc(d.code)+info(d)+'</small></b>'+main(d)+'<button data-a="mn">⋯</button></div>',
+  S=[['w','Wartet auf deine Unterschrift'],['o','Offen bei den Übungsleitern'],['f','Fertig']];
+  box.innerHTML=(A.length?'':'<div class="card msg">Noch nichts angelegt. Lege unter „Neue Runde“ die ersten Dokumente an.</div>')+(g.w.length?'<button class="p" id="nx" style="width:100%;margin-bottom:10px">Nächstes unterschreiben</button>':'')+S.map(([k,t])=>'<details class="sec"'+(k!=='f'?' open':'')+'><summary>'+t+' ('+g[k].length+')</summary>'+(g[k].map(row).join('')||'<p class="msg">Nichts offen.</p>')+'</details>').join('');
+  box.onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.id==='nx'){act('vs',W[0]);return}const r=b.closest('.row'),d=r&&A.find(x=>x.id===r.dataset.id);if(!d)return;
+    if(b.dataset.a==='mn'){modal('<h2>'+esc(d.name)+'</h2><div class="col"><button data-a="fl">Felder festlegen</button><button data-a="rm">Löschen</button><button id="mc">Schließen</button></div>',(o,cl)=>{o.onclick=ev=>{const x=ev.target.closest('button');if(!x)return;cl();if(x.dataset.a)act(x.dataset.a,d)}});return}act(b.dataset.a,d)}}
+const getRow=(id,cols)=>busy('Wird geladen …',async()=>{const{data,error}=await sb.from('docs').select(cols).eq('id',id).single();if(error)throw error;return data});
+async function act(k,d){try{
+  if(k==='sh')return share(d);
+  if(k==='fl'){const r=await getRow(d.id,'pdf');tab('fel');return showPrev(d.type,r.pdf)}
+  if(k==='dl')return download(d);
+  if(k==='vs'){const r=await getRow(d.id,'pdf');return padView(d.name,'Gegenzeichnung durch den Vorstand',r.pdf,async sig=>{
+    const{error}=await sb.from('docs').update({sig_v:sig,at_v:new Date().toISOString()}).eq('id',d.id);if(error)throw error;await fetchA();list();
+    const nx=W.find(x=>x.id!==d.id);app.innerHTML='';admin().then(()=>{if(nx)modal('<h2>Gespeichert ✓</h2><div class="col"><button class="p" id="nn">Nächstes unterschreiben</button><button id="mc">Zur Übersicht</button></div>',(o,c)=>{o.querySelector('#mc').onclick=c;o.querySelector('#nn').onclick=()=>{c();act('vs',nx)}})})},()=>admin())}
+  if(k==='rm')modal('<h2>Löschen?</h2><p>„'+esc(d.name)+'“ und die Unterschriften werden endgültig gelöscht.</p><div class="row"><button id="mn">Abbrechen</button><button class="p" id="my">Löschen</button></div>',(o,c)=>{o.querySelector('#mn').onclick=c;o.querySelector('#my').onclick=async()=>{c();await busy('Wird gelöscht …',()=>sb.from('docs').delete().eq('id',d.id));refresh()}})
+ }catch(e){note('Fehler: '+(e.message||e.code||e))}}
+async function share(d){const url=location.origin+location.pathname+'?d='+d.id,text=MSG(d,url);
+  const{error}=await busy('Link wird erstellt …',()=>sb.from('docs').update({exp:new Date(Date.now()+864e5).toISOString()}).eq('id',d.id));if(error)throw error;refresh();
+  let b=$('#shb');if(!b){b=document.createElement('div');b.id='shb';b.className='card';app.prepend(b)}
+  b.innerHTML='<h2>Nachricht für '+esc(d.name)+'</h2><textarea id="shx" readonly style="min-height:210px">'+esc(text)+'</textarea><div class="row"><button class="p" id="shc">Kopieren</button><a class="bt" id="swa" target="_blank" rel="noopener">WhatsApp</a><a class="bt" id="sma" target="_blank" rel="noopener">E-Mail</a><button id="shs">Teilen …</button><button id="shz">Schließen</button></div><p class="msg" id="shm"></p>';
+  $('#swa').href='https://wa.me/?text='+encodeURIComponent(text);$('#sma').href='mailto:?subject='+encodeURIComponent('Dein Dokument zur Unterzeichnung')+'&body='+encodeURIComponent(text);
+  $('#shz').onclick=()=>b.remove();$('#shc').onclick=async()=>{try{await navigator.clipboard.writeText(text);$('#shm').textContent='Kopiert. Jetzt einfügen.'}catch(e){$('#shx').select();$('#shm').textContent='Bitte den markierten Text von Hand kopieren.'}};
+  $('#shs').onclick=async()=>{try{await navigator.share({text})}catch(e){if(e.name!=='AbortError')$('#shm').textContent='Teilen ist hier nicht verfügbar. Bitte Kopieren nutzen.'}};tab('home');scrollTo(0,0)}
+async function getCfg(t){const{data}=await sb.from('cfg').select('data').eq('type',t).maybeSingle();return(data&&data.data)||JSON.parse(JSON.stringify(DEF[t]))}
+async function showPrev(ty,p64){cfg=await getCfg(ty);const pv=$('#pv'),fl=$('#fld');
+  fl.innerHTML='<option value="ul">Feld Übungsleiter</option>'+(ty==='auszahlung'?'<option value="vs">Feld Vorstand</option>':'');
+  if(!await render(unb(p64),pv,700))return;
+  const draw=()=>{pv.querySelectorAll('.bx').forEach(x=>x.remove());for(const k in cfg){const b=document.createElement('div');b.className='bx';b.textContent=k==='ul'?'Übungsleiter':'Vorstand';b.style.left=cfg[k].x*100+'%';b.style.top=cfg[k].y*100+'%';pv.append(b)}};
+  draw();$('#sv').hidden=false;
+  pv.onclick=e=>{const r=pv.getBoundingClientRect();cfg[fl.value]={x:Math.min(.7,(e.clientX-r.left)/r.width),y:Math.min(.93,(e.clientY-r.top)/r.height)};draw()};
+  $('#sv').onclick=async()=>{const{error}=await busy('Wird gespeichert …',()=>sb.from('cfg').upsert({type:ty,data:cfg}));$('#sv').textContent=error?'Fehler':'Gespeichert ✓';setTimeout(()=>$('#sv').textContent='Felder speichern',1800)}}
+async function readFile(){const f=$('#fi').files[0],gs=$('#gs');pdfBuf=null;$('#nm').value='';if(!f)return;
+  await busy('PDF wird gelesen …',async()=>{try{pdfBuf=new Uint8Array(await f.arrayBuffer());const pdf=await pdfjsLib.getDocument({data:pdfBuf.slice()}).promise,ty=$('#ty').value,out=[];
+    for(let i=1;i<=pdf.numPages;i++){const t=(await(await pdf.getPage(i)).getTextContent()).items.map(x=>x.str).filter(s=>s.trim()),j=t.join(' ').replace(/\s+/g,' ');
+      const m=ty==='auszahlung'?j.match(/wird (.+?) für die in eigener/):null;out.push(m?m[1].trim():(t[t.length-1]||'').trim())}
+    $('#nm').value=out.join('\n');gs.textContent=pdf.numPages+' Seite(n) gelesen. Bitte die Namen prüfen und bei Bedarf korrigieren.'}
+    catch(e){pdfBuf=null;gs.innerHTML='<span class="bad">PDF nicht lesbar: '+esc(e.message||e)+'</span>'}})}
+async function create(){const gs=$('#gs'),ty=$('#ty').value;if(!pdfBuf){gs.textContent='Bitte zuerst ein PDF wählen.';return}
+  const nm=$('#nm').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  try{const src=await PDFLib.PDFDocument.load(pdfBuf),n=src.getPageCount();if(nm.length!==n){gs.innerHTML='<span class="bad">'+n+' Seiten, aber '+nm.length+' Namen. Bitte angleichen.</span>';return}
+    for(let i=0;i<n;i++){const hh=$('#busy h2');if(hh)hh.textContent='Lege '+(i+1)+' von '+n+' an …';
+      const o=await PDFLib.PDFDocument.create(),[p]=await o.copyPages(src,[i]);o.addPage(p);
+      const code=String(1000+(crypto.getRandomValues(new Uint32Array(1))[0]%9000)),{error}=await sb.from('docs').insert({name:nm[i],type:ty,code,pdf:b64(await o.save())});if(error)throw error}
+    pdfBuf=null;$('#fi').value='';$('#nm').value='';gs.textContent=n+' Dokumente angelegt.';await refresh();tab('home')}
+  catch(e){gs.innerHTML='<span class="bad">Fehler: '+esc(e.message||e.code||e)+'</span>'}}
+async function download(d){try{const r=await getRow(d.id,'name,type,pdf,sig_u,at_u,sig_v,at_v'),f=await getCfg(r.type),doc=await PDFLib.PDFDocument.load(unb(r.pdf)),pg=doc.getPage(0),{width:w,height:h}=pg.getSize(),ft=await doc.embedFont(PDFLib.StandardFonts.Helvetica);
+  for(const[k,s,t]of[['ul',r.sig_u,r.at_u],['vs',r.sig_v,r.at_v]]){if(!s||!f[k])continue;const im=await doc.embedPng(unb(s)),W2=.3*w,H=.07*h,X=f[k].x*w,Y=h-f[k].y*h-H;
+    pg.drawImage(im,{x:X,y:Y,width:W2,height:H});pg.drawText('Digital unterschrieben am '+fmt(t),{x:X,y:Y-8,size:7,font:ft})}
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([await doc.save()],{type:'application/pdf'}));a.download=(r.name+'_'+r.type).replace(/[^\wÄÖÜäöüß-]+/g,'_')+'.pdf';document.body.append(a);a.click();a.remove()}
+  catch(e){note('Download nicht möglich: '+(e.message||e.code||e))}}
+/* ---------- Start ---------- */
+const id=new URLSearchParams(location.search).get('d');
+if(SB_URL.startsWith('HIER')){app.innerHTML='<div class="card"><h2>Noch nicht eingerichtet</h2><p class="msg">Trage in der Datei index.html oben die Werte aus Supabase ein (siehe ANLEITUNG.md).</p></div>'}
+else if(id)signer(id);else admin();
+</script></body></html>

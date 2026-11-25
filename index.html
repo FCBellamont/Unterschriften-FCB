@@ -16,7 +16,8 @@ input,textarea,select{width:100%;margin:4px 0 8px}textarea{min-height:90px}
 .bt{color:inherit;background:var(--card);border:1px solid var(--ln);border-radius:12px;padding:11px 14px;text-decoration:none}
 .pv{position:relative;display:block;margin:8px 0}.pv canvas{width:100%;height:auto;display:block;background:#fff;border-radius:6px}
 .bx{position:absolute;width:22%;height:6.6%;border:2px solid var(--ac);background:rgba(201,164,106,.25);pointer-events:none;font-size:12px;color:#000}
-#pad{width:100%;height:170px;background:#fff;border-radius:10px;touch-action:none;display:block}
+#pad{width:100%;aspect-ratio:5/3;height:auto;background:#fff;border:3px dashed var(--ac);border-radius:10px;touch-action:none;display:block}#ph{position:absolute;inset:0;display:grid;place-items:center;color:#bbb;font-size:22px;pointer-events:none}button:disabled{opacity:.45;cursor:not-allowed}
+.st{font-size:13px;padding:3px 9px;border:1px solid;border-radius:99px;white-space:nowrap}.chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px}.chip{padding:8px 12px;border-radius:99px;font-size:14px;border:2px solid var(--ln)}.chip.on{background:var(--bg);font-weight:700}
 .tp{display:none}.tp.on{display:block}
 #nv{position:fixed;left:0;right:0;bottom:0;display:flex;gap:4px;background:var(--card);border-top:1px solid var(--ln);padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px));z-index:20}
 #nv button{flex:1;border:0;background:none;padding:12px 4px;font-size:14px}#nv .cur{background:var(--bg);color:var(--ac);font-weight:700}
@@ -55,13 +56,13 @@ async function render(bytes,box,w){box.innerHTML='<span class="msg">Vorschau wir
 const MSG=(d,url)=>'Hallo '+d.name+',\n\nanbei erhältst du ein Dokument im Rahmen der Übungsleiterpauschale. Sobald die Dokumente unterzeichnet sind, bekommst du in den kommenden Tagen deine Spendenbescheinigung zugestellt.\n\nZum Unterzeichnen benötigst du den folgenden Code, den du bitte nach dem Öffnen des Links eingibst:\n\nCode: '+d.code+'\nLink: '+url+'\n\nDer Link ist 24 Stunden gültig.';
 /* ---------- Unterschrift-Ansicht (Übungsleiter und Vorstand) ---------- */
 function padView(title,sub,pdf,onSign,onBack){
-  app.innerHTML='<div class="card"><h2>'+esc(title)+'</h2><p class="msg">'+sub+'</p><div class="pv" id="pv"></div><canvas id="pad" width="800" height="340"></canvas><div class="row"><button id="cl">Neu schreiben</button><button class="p" id="sg">Unterschreiben und senden</button>'+(onBack?'<button id="bk">Abbrechen</button>':'')+'</div><p class="bad" id="er"></p></div>';
-  render(unb(pdf),$('#pv'),Math.min(innerWidth-32,700));
+  app.innerHTML='<div class="card"><h2>'+esc(title)+'</h2><p class="msg">'+sub+'</p><button class="p" id="go2" style="width:100%;margin:6px 0">Zum Unterschreiben ↓</button><div class="pv" id="pv"></div><h2 id="hint" style="font-size:19px;margin-top:14px">✍ Bitte hier im weißen Feld unterschreiben ↓</h2><div style="position:relative"><canvas id="pad" width="800" height="480"></canvas><div id="ph">Hier unterschreiben</div></div><div class="row"><button id="cl">Neu schreiben</button><button class="p" id="sg" disabled>Unterschreiben und senden</button>'+(onBack?'<button id="bk">Abbrechen</button>':'')+'</div><p class="bad" id="er"></p></div>';
+  render(unb(pdf),$('#pv'),Math.min(innerWidth-32,700));$('#go2').onclick=()=>$('#hint').scrollIntoView({behavior:'smooth',block:'center'});
   const c=$('#pad'),x=c.getContext('2d');x.lineWidth=5;x.lineCap='round';x.strokeStyle='#111';let dr=false,any=false;
   const pt=e=>{const r=c.getBoundingClientRect();return[(e.clientX-r.left)*c.width/r.width,(e.clientY-r.top)*c.height/r.height]};
   c.onpointerdown=e=>{dr=true;c.setPointerCapture(e.pointerId);const[a,b]=pt(e);x.beginPath();x.moveTo(a,b)};
-  c.onpointermove=e=>{if(!dr)return;const[a,b]=pt(e);x.lineTo(a,b);x.stroke();any=true};c.onpointerup=()=>dr=false;
-  $('#cl').onclick=()=>{x.clearRect(0,0,c.width,c.height);any=false};onBack&&($('#bk').onclick=onBack);
+  c.onpointermove=e=>{if(!dr)return;const[a,b]=pt(e);x.lineTo(a,b);x.stroke();if(!any){any=true;$('#sg').disabled=false;$('#ph').style.display='none'}};c.onpointerup=()=>dr=false;
+  $('#cl').onclick=()=>{x.clearRect(0,0,c.width,c.height);any=false;$('#sg').disabled=true;$('#ph').style.display=''};onBack&&($('#bk').onclick=onBack);
   $('#sg').onclick=async()=>{if(!any){$('#er').textContent='Bitte zuerst unterschreiben.';return}
     try{await busy('Wird gespeichert …',()=>onSign(c.toDataURL('image/png')))}catch(e){$('#er').textContent='Speichern nicht möglich: '+(e.message||e.code||e)}}}
 async function signer(id){
@@ -72,7 +73,7 @@ async function signer(id){
     if(error||!r){er.textContent='Verbindung nicht möglich. Bitte später erneut versuchen.';return}
     if(r.err){er.textContent=M[r.err]||'Fehler.';return}
     if(r.signed){app.innerHTML='<div class="card"><h2>Schon unterschrieben</h2><p class="msg">Vielen Dank!</p></div>';return}
-    padView(r.name,(TY[r.type]||'')+'. Bitte lies das Dokument und unterschreibe darunter.',r.pdf,async sig=>{
+    padView(r.name,(TY[r.type]||'')+'. Bitte lies das Dokument. Unterschreibe danach im weißen Feld unter dem Dokument.',r.pdf,async sig=>{
       const{data:s,error:e}=await sb.rpc('sign_doc',{p_id:id,p_code:code,p_sig:sig});if(e)throw e;if(s.err)throw new Error(M[s.err]||s.err);
       app.innerHTML='<div class="card"><h2>Danke, erledigt ✓</h2><p class="msg">Deine Unterschrift ist gespeichert. Du kannst die Seite schließen.</p></div>'})}}
 /* ---------- Vorstand ---------- */
@@ -94,18 +95,26 @@ async function admin(){const{data:{session}}=await sb.auth.getSession();if(!sess
   $('#ex').onclick=async()=>{const{error}=await busy('Wird gelöscht …',()=>sb.from('docs').delete().is('at_u',null).lt('exp',new Date().toISOString()));$('#exm').textContent=error?error.message:'Erledigt.';refresh()};
   $('#rf').onchange=list;$('#kl').onclick=()=>kontroll(false);$('#ab').onclick=abschluss;$('#rl').onclick=delRunde;$('#wp').onclick=wipe;tab('home');refresh()}
 async function refresh(){try{await fetchA()}catch(e){note('Laden nicht möglich: '+(e.message||e.code||e));return}list()}
-function list(){const box=$('#ls');if(!box)return;const rf=$('#rf'),cur=rf.value||'*',rs=[...new Set(A.map(d=>d.runde||''))].sort();rf.innerHTML='<option value="*">Alle Runden</option>'+rs.map(r=>'<option value="'+esc(r)+'">'+(r?esc(r):'Ohne Runde')+'</option>').join('');rf.value=(rs.includes(cur)||cur==='*')?cur:'*';$('#rbar').hidden=rf.value==='*';const V=rf.value==='*'?A:A.filter(d=>(d.runde||'')===rf.value),g={w:[],o:[],f:[]};
-  V.forEach(d=>(done(d)?g.f:(d.at_u&&d.type==='auszahlung'&&!d.at_v)?g.w:g.o).push(d));W=g.w;
-  const main=d=>done(d)?'<button class="p" data-a="dl">PDF laden</button>':d.at_u?'<button class="p" data-a="vs">Unterschreiben</button>':'<button class="p" data-a="sh">Teilen</button>',
-  info=d=>done(d)||d.at_u?'':' · '+(d.exp?(new Date(d.exp)<new Date()?'Link abgelaufen':'gültig bis '+fmt(d.exp)):'nicht geteilt'),
-  row=d=>'<div class="row" data-id="'+d.id+'"><b>'+esc(d.name)+'<br><small>'+(d.runde?esc(d.runde)+' · ':'')+(TY[d.type]||d.type)+' · Code '+esc(d.code)+info(d)+'</small></b>'+main(d)+'<button data-a="mn">⋯</button></div>',
-  S=[['w','Wartet auf deine Unterschrift'],['o','Offen bei den Übungsleitern'],['f','Fertig']];
-  box.innerHTML=(A.length?'':'<div class="card msg">Noch nichts angelegt. Lege unter „Neue Runde“ die ersten Dokumente an.</div>')+(g.w.length?'<button class="p" id="nx" style="width:100%;margin-bottom:10px">Nächstes unterschreiben</button>':'')+S.map(([k,t])=>'<details class="sec"'+(k!=='f'?' open':'')+'><summary>'+t+' ('+g[k].length+')</summary>'+(g[k].map(row).join('')||'<p class="msg">Nichts offen.</p>')+'</details>').join('');
-  box.onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.id==='nx'){act('vs',W[0]);return}const r=b.closest('.row'),d=r&&A.find(x=>x.id===r.dataset.id);if(!d)return;
-    if(b.dataset.a==='mn'){modal('<h2>'+esc(d.name)+'</h2><div class="col"><button data-a="fl">Felder festlegen</button><button data-a="rm">Löschen</button><button id="mc">Schließen</button></div>',(o,cl)=>{o.onclick=ev=>{const x=ev.target.closest('button');if(!x)return;cl();if(x.dataset.a)act(x.dataset.a,d)}});return}act(b.dataset.a,d)}}
+let fl='*';
+const st=d=>done(d)?'f':d.at_u?'b':!d.exp?'n':new Date(d.exp)<new Date()?'r':'y';
+const ST={n:['Neu','○','#c9a46a'],y:['Verschickt','✉','#ffd84d'],r:['Abgelaufen','⚠','#ff8f80'],b:['Du bist dran','✎','#6ab0ff'],f:['Fertig','✓','#7fd6a0']};
+function chType(d){const nt=d.type==='verzicht'?'auszahlung':'verzicht';
+  modal('<h2>Typ ändern?</h2><p>„'+esc(d.name)+'“ ist als <b>'+TY[d.type]+'</b> angelegt. Auf <b>'+TY[nt]+'</b> ändern?</p><div class="row"><button id="mn">Abbrechen</button><button class="p" id="my">Ändern</button></div>',(o,c)=>{o.querySelector('#mn').onclick=c;o.querySelector('#my').onclick=async()=>{c();try{const{error}=await busy('Wird gespeichert …',()=>sb.from('docs').update({type:nt}).eq('id',d.id));if(error)throw error;await refresh()}catch(e){note('Ändern nicht möglich: '+(e.message||e.code||e))}}})}
+function list(){const box=$('#ls');if(!box)return;const rf=$('#rf'),cur=rf.value||'*',rs=[...new Set(A.map(d=>d.runde||''))].sort();
+  rf.innerHTML='<option value="*">Alle Runden</option>'+rs.map(r=>'<option value="'+esc(r)+'">'+(r?esc(r):'Ohne Runde')+'</option>').join('');rf.value=(rs.includes(cur)||cur==='*')?cur:'*';$('#rbar').hidden=rf.value==='*';
+  const V=rf.value==='*'?A:A.filter(d=>(d.runde||'')===rf.value),c={n:0,y:0,r:0,b:0,f:0};V.forEach(d=>c[st(d)]++);W=V.filter(d=>st(d)==='b');
+  const L=(fl==='*'?V:V.filter(d=>st(d)===fl)).sort((x,y)=>(x.name||'').localeCompare(y.name||'','de')),
+  main=d=>{const k=st(d);return k==='f'?'<button class="p" data-a="dl">PDF laden</button>':k==='b'?'<button class="p" data-a="vs">Unterschreiben</button>':'<button class="p" data-a="sh">'+(k==='n'?'Teilen':k==='r'?'Neu teilen':'Erneut teilen')+'</button>'},
+  left=d=>' · noch '+Math.max(1,Math.ceil((new Date(d.exp)-Date.now())/36e5))+' Std.',
+  row=d=>{const k=st(d),[w,ic,col]=ST[k];return '<div class="row" data-id="'+d.id+'" style="border-left:6px '+(k==='n'?'dashed':'solid')+' '+col+';padding-left:10px"><b>'+esc(d.name)+'<br><small>'+(d.runde?esc(d.runde)+' · ':'')+(TY[d.type]||d.type)+' · Code '+esc(d.code)+'</small></b><span class="st" style="color:'+col+';border-color:'+col+'">'+ic+' '+w+(k==='y'?left(d):'')+'</span>'+main(d)+'<button data-a="mn">⋯</button></div>'};
+  box.className='';box.innerHTML=(A.length?'':'<div class="card msg">Noch nichts angelegt. Lege unter „Neue Runde“ die ersten Dokumente an.</div>')+(W.length?'<button class="p" id="nx" style="width:100%;margin-bottom:10px">Nächstes unterschreiben ('+W.length+')</button>':'')
+   +'<div class="chips">'+Object.keys(ST).map(k=>'<button class="chip'+(fl===k?' on':'')+'" data-f="'+k+'" style="border-color:'+ST[k][2]+'">'+ST[k][1]+' '+c[k]+' '+ST[k][0]+'</button>').join('')+'</div><div class="sec">'+(L.map(row).join('')||'<p class="msg">Nichts in dieser Ansicht.</p>')+'</div>';
+  box.onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.f){fl=fl===b.dataset.f?'*':b.dataset.f;list();return}if(b.id==='nx'){act('vs',W[0]);return}
+    const r=b.closest('.row'),d=r&&A.find(x=>x.id===r.dataset.id);if(!d)return;
+    if(b.dataset.a==='mn'){modal('<h2>'+esc(d.name)+'</h2><div class="col"><button data-a="fl">Felder festlegen</button><button data-a="ty">Typ ändern</button><button data-a="rm">Löschen</button><button id="mc">Schließen</button></div>',(o,cl)=>{o.onclick=ev=>{const x=ev.target.closest('button');if(!x)return;cl();if(x.dataset.a)act(x.dataset.a,d)}});return}act(b.dataset.a,d)}}
 const getRow=(id,cols)=>busy('Wird geladen …',async()=>{const{data,error}=await sb.from('docs').select(cols).eq('id',id).single();if(error)throw error;return data});
 async function act(k,d){try{
-  if(k==='sh')return share(d);
+  if(k==='sh')return share(d);if(k==='ty')return chType(d);
   if(k==='fl'){const r=await getRow(d.id,'pdf');tab('fel');return showPrev(d.type,r.pdf)}
   if(k==='dl')return download(d);
   if(k==='vs'){const r=await getRow(d.id,'pdf');return padView(d.name,'Gegenzeichnung durch den Vorstand',r.pdf,async sig=>{
@@ -129,10 +138,12 @@ async function showPrev(ty,p64){cfg=await getCfg(ty);const pv=$('#pv'),fl=$('#fl
   pv.onclick=e=>{const r=pv.getBoundingClientRect();cfg[fl.value]={x:Math.min(.7,(e.clientX-r.left)/r.width),y:Math.max(.08,Math.min(.97,(e.clientY-r.top)/r.height))};draw()};
   $('#sv').onclick=async()=>{const{error}=await busy('Wird gespeichert …',()=>sb.from('cfg').upsert({type:ty,data:cfg}));$('#sv').textContent=error?'Fehler':'Gespeichert ✓';setTimeout(()=>$('#sv').textContent='Felder speichern',1800)}}
 async function readFile(){const f=$('#fi').files[0],gs=$('#gs');pdfBuf=null;$('#nm').value='';if(!f)return;
-  await busy('PDF wird gelesen …',async()=>{try{pdfBuf=new Uint8Array(await f.arrayBuffer());const pdf=await pdfjsLib.getDocument({data:pdfBuf.slice()}).promise,ty=$('#ty').value,out=[];let mu=0,mv=0;
+  await busy('PDF wird gelesen …',async()=>{try{pdfBuf=new Uint8Array(await f.arrayBuffer());const pdf=await pdfjsLib.getDocument({data:pdfBuf.slice()}).promise,out=[],P=[];let ty=$('#ty').value,mu=0,mv=0,nv=0,na=0;
     for(let i=1;i<=pdf.numPages;i++){let t=(await(await pdf.getPage(i)).getTextContent()).items.map(x=>x.str);const raw=t.join(' ');if(raw.includes('[[UL]]'))mu++;if(raw.includes('[[VS]]'))mv++;t=t.map(s=>s.replace(/\[\[(UL|VS)\]\]/g,'')).filter(s=>s.trim());const j=t.join(' ').replace(/\s+/g,' ');
-      const m=ty==='auszahlung'?j.match(/wird (.+?) für die in eigener/):null;out.push(m?m[1].trim():(t[t.length-1]||'').trim())}
-    $('#nm').value=out.join('\n');const N=pdf.numPages,ok=c=>c===N?'✓':'⚠ '+c+' von '+N;gs.textContent=N+' Seite(n) gelesen. Marker Übungsleiter '+ok(mu)+(ty==='auszahlung'?', Vorstand '+ok(mv):'')+'. Wo ein Marker fehlt, gilt das gespeicherte Feld. Bitte die Namen prüfen.'}
+      if(/Hiermit verzichte ich/.test(j))nv++;if(/Betrag zur Zahlung angewiesen|für die in eigener/.test(j))na++;P.push({t,j})}
+    const det=nv&&!na?'verzicht':na&&!nv?'auszahlung':null;if(det){ty=det;$('#ty').value=det}
+    P.forEach(({t,j})=>{const m=ty==='auszahlung'?j.match(/wird (.+?) für die in eigener/):null;out.push(m?m[1].trim():(t[t.length-1]||'').trim())});
+    $('#nm').value=out.join('\n');const N=pdf.numPages,ok=c=>c===N?'✓':'⚠ '+c+' von '+N;gs.textContent=(det?'Erkannt: '+(det==='verzicht'?'Verzichtserklärung':'Auszahlung')+' ✓. ':'⚠ Dokumenttyp nicht eindeutig erkannt, bitte oben prüfen. ')+N+' Seite(n) gelesen. Marker Übungsleiter '+ok(mu)+(ty==='auszahlung'?', Vorstand '+ok(mv):'')+'. Wo ein Marker fehlt, gilt das gespeicherte Feld. Bitte die Namen prüfen.'}
     catch(e){pdfBuf=null;gs.innerHTML='<span class="bad">PDF nicht lesbar: '+esc(e.message||e)+'</span>'}})}
 async function create(){const gs=$('#gs'),ty=$('#ty').value,rd=$('#rd').value.trim();if(!rd){gs.innerHTML='<span class="bad">Bitte eine Bezeichnung für die Runde eintragen.</span>';return}if(!pdfBuf){gs.textContent='Bitte zuerst ein PDF wählen.';return}
   const nm=$('#nm').value.split('\n').map(s=>s.trim()).filter(Boolean);
